@@ -6,15 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/apex/log"
-	"github.com/apex/log/handlers/text"
-	"github.com/harlow/kinesis-connectors"
-	"github.com/harlow/kinesis-connectors/emitter/s3"
+	"github.com/telenor-digital-asia/kinesis-connectors"
+	"github.com/telenor-digital-asia/kinesis-connectors/emitter/s3"
 )
 
 func main() {
-	log.SetHandler(text.New(os.Stderr))
-	log.SetLevel(log.DebugLevel)
 
 	var (
 		app    = flag.String("a", "", "App name")
@@ -43,6 +39,7 @@ func main() {
 		err := e.Emit(
 			s3.Key("", b.FirstSeq(), b.LastSeq()),
 			bytes.NewReader(body.Bytes()),
+			"",
 		)
 
 		if err != nil {

@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/aws/aws-sdk-go/service/kinesis"
-	"github.com/harlow/kinesis-connectors"
+	connector "github.com/telenor-digital-asia/kinesis-connectors"
 )
 
 var (
@@ -32,10 +32,11 @@ func main() {
 	svc := firehose.New(session.New())
 
 	cfg := connector.Config{
-		MaxRecordCount: 400,
+		AppName:    *app,
+		StreamName: *stream,
 	}
 
-	c := connector.NewConsumer(*app, *stream, cfg)
+	c := connector.NewConsumer(cfg)
 
 	c.Start(connector.HandlerFunc(func(b connector.Buffer) {
 		params := &firehose.PutRecordBatchInput{

@@ -27,10 +27,10 @@ type RedshiftEmitter struct {
 
 // Emit is invoked when the buffer is full. This method leverages the S3Emitter and
 // then issues a copy command to Redshift data store.
-func (e RedshiftEmitter) Emit(s3Key string, b io.ReadSeeker) {
+func (e RedshiftEmitter) Emit(s3Key string, b io.ReadSeeker, ACL string) {
 	// put contents to S3 Bucket
 	s3 := &Emitter{Bucket: e.S3Bucket}
-	s3.Emit(s3Key, b)
+	s3.Emit(s3Key, b, ACL)
 
 	for i := 0; i < 10; i++ {
 		// execute copy statement

@@ -5,10 +5,9 @@ import (
 	"flag"
 	"os"
 
-	"github.com/apex/log"
-	"github.com/apex/log/handlers/text"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	log "github.com/sirupsen/logrus"
 	producer "github.com/tj/go-kinesis"
 )
 
@@ -18,8 +17,6 @@ var stream = flag.String("s", "", "Stream name")
 
 func main() {
 	flag.Parse()
-	log.SetHandler(text.New(os.Stderr))
-	log.SetLevel(log.DebugLevel)
 
 	// set up producer
 	svc := kinesis.New(session.New())

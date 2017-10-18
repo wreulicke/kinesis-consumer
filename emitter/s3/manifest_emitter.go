@@ -16,10 +16,10 @@ type ManifestEmitter struct {
 	Prefix       string
 }
 
-func (e ManifestEmitter) Emit(s3Key string, b io.ReadSeeker) error {
+func (e ManifestEmitter) Emit(s3Key string, b io.ReadSeeker, ACL string) error {
 	// put contents to S3 Bucket
 	s3 := &Emitter{Bucket: e.Bucket}
-	s3.Emit(s3Key, b)
+	s3.Emit(s3Key, b, ACL)
 
 	// put file path on Kinesis output stream
 	params := &kinesis.PutRecordInput{
