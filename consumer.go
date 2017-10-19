@@ -16,7 +16,7 @@ func NewConsumer(config Config) *Consumer {
 
 	svc := kinesis.New(
 		session.New(
-			aws.NewConfig().WithMaxRetries(10),
+			aws.NewConfig().WithMaxRetries(10).WithRegion(config.StreamRegion),
 		),
 	)
 

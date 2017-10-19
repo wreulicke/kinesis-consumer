@@ -22,6 +22,9 @@ type Config struct {
 	// StreamName is the Kinesis stream.
 	StreamName string
 
+	// StreamRegion is the Kinesis stream.
+	StreamRegion string
+
 	// FlushInterval is a regular interval for flushing the buffer. Defaults to 1s.
 	FlushInterval time.Duration
 
@@ -55,9 +58,15 @@ func (c *Config) setDefaults() {
 		os.Exit(1)
 	}
 
+	if c.StreamRegion == "" {
+		c.Logger.WithField("type", "config").Error("StreamRegion required")
+		os.Exit(1)
+	}
+
 	c.Logger.WithFields(log.Fields{
 		"app":    c.AppName,
 		"stream": c.StreamName,
+		"region": c.StreamRegion,
 	})
 
 	if c.BufferSize == 0 {
