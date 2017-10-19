@@ -30,7 +30,6 @@ func Test_FirstSeq(t *testing.T) {
 	if b.FirstSeq() != "1" {
 		t.Fail()
 	}
-	// assert.Equal(t, b.FirstSeq(), "1")
 
 	b.AddRecord(r2)
 	if b.FirstSeq() != "1" {

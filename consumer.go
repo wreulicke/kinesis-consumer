@@ -59,37 +59,30 @@ func (c *Consumer) handlerLoop(shardID string, handler Handler) {
 	ctx := c.Logger.WithFields(log.Fields{
 		"shard": shardID,
 	})
-	shardIterator := c.getShardIterator(shardID)
-
 	ctx.Info("processing")
-
+	shardIterator := c.getShardIterator(shardID)
 	for {
 		resp, err := c.svc.GetRecords(
 			&kinesis.GetRecordsInput{
 				ShardIterator: shardIterator,
 			},
 		)
-
 		if err != nil {
 			ctx.WithError(err).Error("GetRecords")
-			shardIterator = c.getShardIterator(shardID)
-			continue
-		}
-
-		if len(resp.Records) > 0 {
-			for _, r := range resp.Records {
-				buf.AddRecord(r)
-
-				if buf.ShouldFlush() {
-					handler.HandleRecords(*buf)
-					ctx.WithField("count", buf.RecordCount()).Info("flushed")
-					c.Checkpoint.SetCheckpoint(shardID, buf.LastSeq())
-					buf.Flush()
+		} else {
+			if len(resp.Records) > 0 {
+				for _, r := range resp.Records {
+					buf.AddRecord(r)
+					if buf.ShouldFlush() {
+						handler.HandleRecords(*buf)
+						ctx.WithField("count", buf.RecordCount()).Info("flushed")
+						c.Checkpoint.SetCheckpoint(shardID, buf.LastSeq())
+						buf.Flush()
+					}
 				}
 			}
 		}
-
-		if resp.NextShardIterator == nil || shardIterator == resp.NextShardIterator {
+		if resp == nil || resp.NextShardIterator == nil || shardIterator == resp.NextShardIterator {
 			shardIterator = c.getShardIterator(shardID)
 		} else {
 			shardIterator = resp.NextShardIterator
