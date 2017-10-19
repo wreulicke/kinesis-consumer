@@ -14,7 +14,7 @@ type RedisCheckpoint struct {
 	AppName    string
 	StreamName string
 
-	client         *redis.Client
+	Client         *redis.Client
 	sequenceNumber string
 }
 
@@ -22,7 +22,7 @@ type RedisCheckpoint struct {
 // Typically used to determine whether we should start processing the shard with
 // TRIM_HORIZON or AFTER_SEQUENCE_NUMBER (if checkpoint exists).
 func (c *RedisCheckpoint) CheckpointExists(shardID string) bool {
-	val, _ := c.client.Get(c.key(shardID)).Result()
+	val, _ := c.Client.Get(c.key(shardID)).Result()
 
 	if val != "" {
 		c.sequenceNumber = val
@@ -40,7 +40,7 @@ func (c *RedisCheckpoint) SequenceNumber() string {
 // SetCheckpoint stores a checkpoint for a shard (e.g. sequence number of last record processed by application).
 // Upon failover, record processing is resumed from this point.
 func (c *RedisCheckpoint) SetCheckpoint(shardID string, sequenceNumber string) {
-	err := c.client.Set(c.key(shardID), sequenceNumber, 0).Err()
+	err := c.Client.Set(c.key(shardID), sequenceNumber, 0).Err()
 	if err != nil {
 		log.Printf("redis checkpoint set error: %v", err)
 	}
