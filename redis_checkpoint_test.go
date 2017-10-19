@@ -14,7 +14,7 @@ func Test_CheckpointLifecycle(t *testing.T) {
 	c := RedisCheckpoint{
 		AppName:    "app",
 		StreamName: "stream",
-		client:     client,
+		Client:     client,
 	}
 
 	// set checkpoint
@@ -39,7 +39,7 @@ func Test_key(t *testing.T) {
 	c := &RedisCheckpoint{
 		AppName:    "app",
 		StreamName: "stream",
-		client:     client,
+		Client:     client,
 	}
 
 	expected := "app:checkpoint:stream:shard"

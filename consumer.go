@@ -26,6 +26,7 @@ func NewConsumer(config Config) *Consumer {
 	}
 }
 
+// Consumer struct
 type Consumer struct {
 	svc *kinesis.Kinesis
 	Config
