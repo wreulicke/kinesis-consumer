@@ -16,7 +16,7 @@ func NewS3Emitter(bucket, region string) *S3Emitter {
 		aws.NewConfig().WithRegion(region),
 	)
 	return &S3Emitter{
-		svc:    svc,
+		S3Svc:  svc,
 		Bucket: bucket,
 	}
 }
@@ -28,7 +28,7 @@ func NewS3Emitter(bucket, region string) *S3Emitter {
 // from the first and last sequence numbers of the records contained in that file separated by a
 // dash. This struct requires the configuration of an S3 bucket and endpoint.
 type S3Emitter struct {
-	svc    *s3.S3
+	S3Svc  *s3.S3
 	Bucket string
 }
 
@@ -41,7 +41,7 @@ func (e S3Emitter) EmitWithACL(ACL, s3Key string, b io.ReadSeeker) error {
 		ContentType: aws.String("text/plain"),
 		Key:         aws.String(s3Key),
 	}
-	_, err := e.svc.PutObject(params)
+	_, err := e.S3Svc.PutObject(params)
 	return err
 }
 
@@ -53,7 +53,7 @@ func (e S3Emitter) Emit(s3Key string, b io.ReadSeeker) error {
 		ContentType: aws.String("text/plain"),
 		Key:         aws.String(s3Key),
 	}
-	_, err := e.svc.PutObject(params)
+	_, err := e.S3Svc.PutObject(params)
 	return err
 }
 
