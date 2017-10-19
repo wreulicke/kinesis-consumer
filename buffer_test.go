@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/kinesis"
-	"github.com/bmizerany/assert"
 )
 
 func BenchmarkBufferLifecycle(b *testing.B) {
@@ -28,10 +27,14 @@ func Test_FirstSeq(t *testing.T) {
 	r2 := &kinesis.Record{SequenceNumber: &s2}
 
 	b.AddRecord(r1)
-	assert.Equal(t, b.FirstSeq(), "1")
+	if b.FirstSeq() != "1" {
+		t.Fail()
+	}
 
 	b.AddRecord(r2)
-	assert.Equal(t, b.FirstSeq(), "1")
+	if b.FirstSeq() != "1" {
+		t.Fail()
+	}
 }
 
 func Test_LastSeq(t *testing.T) {
@@ -41,10 +44,14 @@ func Test_LastSeq(t *testing.T) {
 	r2 := &kinesis.Record{SequenceNumber: &s2}
 
 	b.AddRecord(r1)
-	assert.Equal(t, b.LastSeq(), "1")
+	if b.LastSeq() != "1" {
+		t.Fail()
+	}
 
 	b.AddRecord(r2)
-	assert.Equal(t, b.LastSeq(), "2")
+	if b.LastSeq() != "2" {
+		t.Fail()
+	}
 }
 
 func Test_ShouldFlush(t *testing.T) {
@@ -54,8 +61,11 @@ func Test_ShouldFlush(t *testing.T) {
 	r2 := &kinesis.Record{SequenceNumber: &s2}
 
 	b.AddRecord(r1)
-	assert.Equal(t, b.ShouldFlush(), false)
-
+	if b.ShouldFlush() != false {
+		t.Fail()
+	}
 	b.AddRecord(r2)
-	assert.Equal(t, b.ShouldFlush(), true)
+	if b.ShouldFlush() == false {
+		t.Fail()
+	}
 }

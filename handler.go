@@ -1,5 +1,6 @@
 package connector
 
+// Handler function to handle incoming data from KS
 type Handler interface {
 	HandleRecords(b Buffer)
 }

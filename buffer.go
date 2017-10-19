@@ -43,7 +43,7 @@ func (b *Buffer) RecordCount() int {
 	return len(b.records)
 }
 
-// FirstSequenceNumber returns the sequence number of the first record in the buffer.
+// FirstSeq returns the sequence number of the first record in the buffer.
 func (b *Buffer) FirstSeq() string {
 	return b.firstSequenceNumber
 }
