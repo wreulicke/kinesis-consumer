@@ -1,17 +1,10 @@
 package connector
 
 import (
-	"os"
+	"io/ioutil"
 	"time"
 
-	redis "gopkg.in/redis.v5"
-
-	log "github.com/sirupsen/logrus"
-)
-
-const (
-	defaultBufferSize = 500
-	defaultRedisAddr  = "127.0.0.1:6379"
+	"log"
 )
 
 // Config vars for the application
@@ -38,39 +31,32 @@ type Config struct {
 	Checkpoint Checkpoint
 }
 
+type noopCheckpoint struct{}
+
+func (n noopCheckpoint) Set(string, string, string) error   { return nil }
+func (n noopCheckpoint) Get(string, string) (string, error) { return "", nil }
+
 // defaults for configuration.
 func (c *Config) setDefaults() {
 	if c.Logger == nil {
-		c.Logger = log.New()
+		c.Logger = log.New(ioutil.Discard, "", log.LstdFlags)
 	}
-
-	c.Logger.WithFields(log.Fields{
-		"package": "kinesis-connectors",
-	})
+	c.Logger.Println("kinesis-connectors")
 
 	if c.AppName == "" {
-		c.Logger.WithField("type", "config").Error("AppName required")
-		os.Exit(1)
+		c.Logger.Panicf("AppName required")
 	}
 
 	if c.StreamName == "" {
-		c.Logger.WithField("type", "config").Error("StreamName required")
-		os.Exit(1)
+		c.Logger.Panicf("StreamName required")
 	}
 
 	if c.StreamRegion == "" {
-		c.Logger.WithField("type", "config").Error("StreamRegion required")
-		os.Exit(1)
+		c.Logger.Panicf("StreamRegion required")
 	}
 
-	c.Logger.WithFields(log.Fields{
-		"app":    c.AppName,
-		"stream": c.StreamName,
-		"region": c.StreamRegion,
-	})
-
 	if c.BufferSize == 0 {
-		c.BufferSize = defaultBufferSize
+		c.BufferSize = 500
 	}
 
 	if c.FlushInterval == 0 {
@@ -78,26 +64,6 @@ func (c *Config) setDefaults() {
 	}
 
 	if c.Checkpoint == nil {
-		client, err := defaultRedisClient()
-		if err != nil {
-			c.Logger.WithError(err).Error("Redis connection failed")
-			os.Exit(1)
-		}
-		c.Checkpoint = &RedisCheckpoint{
-			AppName:    c.AppName,
-			StreamName: c.StreamName,
-			Client:     client,
-		}
+		c.Checkpoint = &noopCheckpoint{}
 	}
-}
-
-func defaultRedisClient() (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr: defaultRedisAddr,
-	})
-	_, err := client.Ping().Result()
-	if err != nil {
-		return nil, err
-	}
-	return client, nil
 }

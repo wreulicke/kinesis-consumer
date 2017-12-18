@@ -1,17 +1,13 @@
 package connector
 
 import (
-	"os"
-
-	log "github.com/sirupsen/logrus"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
-// NewConsumer creates a new consumer with initialied kinesis connection
-func NewConsumer(config Config) *Consumer {
+// New creates a new consumer with initialied kinesis connection
+func New(config Config) *Consumer {
 	config.setDefaults()
 
 	svc := kinesis.New(
@@ -42,8 +38,7 @@ func (c *Consumer) Start(handler Handler) {
 	)
 
 	if err != nil {
-		c.Logger.WithError(err).Error("DescribeStream")
-		os.Exit(1)
+		c.Logger.Panicf("Error DescribeStream %v", err.Error())
 	}
 
 	for _, shard := range resp.StreamDescription.Shards {
@@ -56,10 +51,7 @@ func (c *Consumer) handlerLoop(shardID string, handler Handler) {
 		MaxRecordCount: c.BufferSize,
 		shardID:        shardID,
 	}
-	ctx := c.Logger.WithFields(log.Fields{
-		"shard": shardID,
-	})
-	ctx.Info("processing")
+	c.Logger.Printf("Processing, %v", shardID)
 	shardIterator := c.getShardIterator(shardID)
 	for {
 		resp, err := c.svc.GetRecords(
@@ -68,15 +60,15 @@ func (c *Consumer) handlerLoop(shardID string, handler Handler) {
 			},
 		)
 		if err != nil {
-			ctx.WithError(err).Error("GetRecords")
+			c.Logger.Printf("GetRecords %v", err.Error())
 		} else {
 			if len(resp.Records) > 0 {
 				for _, r := range resp.Records {
 					buf.AddRecord(r)
 					if buf.ShouldFlush() {
 						handler.HandleRecords(*buf)
-						ctx.WithField("count", buf.RecordCount()).Info("flushed")
-						c.Checkpoint.SetCheckpoint(shardID, buf.LastSeq())
+						c.Logger.Printf("Count %v flushed", buf.RecordCount())
+						c.Checkpoint.Set(c.StreamName, shardID, buf.LastSeq())
 						buf.Flush()
 					}
 				}
@@ -92,21 +84,20 @@ func (c *Consumer) handlerLoop(shardID string, handler Handler) {
 
 func (c *Consumer) getShardIterator(shardID string) *string {
 	params := &kinesis.GetShardIteratorInput{
-		ShardId:    aws.String(shardID),
 		StreamName: aws.String(c.StreamName),
+		ShardId:    aws.String(shardID),
 	}
 
-	if c.Checkpoint.CheckpointExists(shardID) {
+	if lastSeq, err := c.Checkpoint.Get(c.StreamName, shardID); err == nil {
 		params.ShardIteratorType = aws.String("AFTER_SEQUENCE_NUMBER")
-		params.StartingSequenceNumber = aws.String(c.Checkpoint.SequenceNumber())
+		params.StartingSequenceNumber = aws.String(lastSeq)
 	} else {
 		params.ShardIteratorType = aws.String("TRIM_HORIZON") //Read from beginning of the stream
 	}
 
 	resp, err := c.svc.GetShardIterator(params)
 	if err != nil {
-		c.Logger.WithError(err).Error("GetShardIterator")
-		os.Exit(1)
+		c.Logger.Panicf("Error GetShardIterator %v", err.Error())
 	}
 
 	return resp.ShardIterator
