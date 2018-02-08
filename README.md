@@ -1,98 +1,155 @@
-# Golang Kinesis Connectors
+# Golang Kinesis Consumer
 
-__Kinesis connector applications written in Go__
+Kinesis consumer applications written in Go. This library is intended to be a lightweight wrapper around the Kinesis API to read records, save checkpoints (with swappable backends), and gracefully recover from service timeouts/errors.
 
-> With the new release of Kinesis Firehose I'd recommend using the [Lambda Streams to Firehose](https://github.com/awslabs/lambda-streams-to-firehose) project for loading data directly into S3 and Redshift.
+__Alternate serverless options:__
 
-Inspired by the [Amazon Kinesis Connector Library](https://github.com/awslabs/amazon-kinesis-connectors). This library is intended to be a lightweight wrapper around the Kinesis API to handle batching records, setting checkpoints, respecting ratelimits,  and recovering from network errors.
+* [Kinesis to Firehose](http://docs.aws.amazon.com/firehose/latest/dev/writing-with-kinesis-streams.html) can be used to archive data directly to S3, Redshift, or Elasticsearch without running a consumer application.
 
-![golang_kinesis_connector](https://cloud.githubusercontent.com/assets/739782/4262283/2ee2550e-3b97-11e4-8cd1-21a5d7ee0964.png)
+* [Process Kinensis Streams with Golang and AWS Lambda](https://medium.com/@harlow/processing-kinesis-streams-w-aws-lambda-and-golang-264efc8f979a) for serverless processing and checkpoint management.
+
+## Installation
+
+Get the package source:
+
+    $ go get github.com/harlow/kinesis-consumer
 
 ## Overview
 
-The consumer expects a handler func that will process a buffer of incoming records.
+The consumer leverages a handler func that accepts a Kinesis record. The `Scan` method will consume all shards concurrently and call the callback func as it receives records from the stream.
+
+_Important: The default Log, Counter, and Checkpoint are no-op which means no logs, counts, or checkpoints will be emitted when scanning the stream. See the options below to override these defaults._
 
 ```go
+import(
+	// ...
+
+	consumer "github.com/harlow/kinesis-consumer"
+)
+
 func main() {
-  var(
-    app    = flag.String("app", "", "The app name")
-    stream = flag.String("stream", "", "The stream name")
-  )
-  flag.Parse()
+	var stream = flag.String("stream", "", "Stream name")
+	flag.Parse()
 
-  // create new consumer
-  c := connector.NewConsumer(connector.Config{
-    AppName:        *app,
-    MaxRecordCount: 400,
-    Streamname:     *stream,
-  })
+	// consumer
+	c, err := consumer.New(*stream)
+	if err != nil {
+		log.Fatalf("consumer error: %v", err)
+	}
 
-  // process records from the stream
-  c.Start(connector.HandlerFunc(func(b connector.Buffer) {
-    fmt.Println(b.GetRecords())
-  }))
+	// start
+	err = c.Scan(context.TODO(), func(r *consumer.Record) bool {
+		fmt.Println(string(r.Data))
+		return true // continue scanning
+	})
+	if err != nil {
+		log.Fatalf("scan error: %v", err)
+	}
 
-  select {}
+	// Note: If you need to aggregate based on a specific shard the `ScanShard`
+	// method should be leverged instead.
 }
 ```
 
-### Config
+## Checkpoint
 
-The default behavior for checkpointing uses Redis on localhost. To set a custom Redis URL use ENV vars:
+To record the progress of the consumer in the stream we use a checkpoint to store the last sequence number the consumer has read from a particular shard.
+
+This will allow consumers to re-launch and pick up at the position in the stream where they left off.
+
+The uniq identifier for a consumer is `[appName, streamName, shardID]`
+
+<img width="722" alt="kinesis-checkpoints" src="https://user-images.githubusercontent.com/739782/33085867-d8336122-ce9a-11e7-8c8a-a8afeb09dff1.png">
+
+Note: The default checkpoint is no-op. Which means the scan will not persist any state and the consumer will start from the beginning of the stream each time it is re-started.
+
+To persist scan progress choose one of the following checkpoints:
+
+### Redis Checkpoint
+
+The Redis checkpoint requries App Name, and Stream Name:
+
+```go
+import checkpoint "github.com/harlow/kinesis-consumer/checkpoint/redis"
+
+// redis checkpoint
+ck, err := checkpoint.New(appName)
+if err != nil {
+	log.Fatalf("new checkpoint error: %v", err)
+}
+```
+
+### DynamoDB Checkpoint
+
+The DynamoDB checkpoint requires Table Name, App Name, and Stream Name:
+
+```go
+import checkpoint "github.com/harlow/kinesis-consumer/checkpoint/ddb"
+
+// ddb checkpoint
+ck, err := checkpoint.New(appName, tableName)
+if err != nil {
+	log.Fatalf("new checkpoint error: %v", err)
+}
+```
+
+To leverage the DDB checkpoint we'll also need to create a table:
 
 ```
-REDIS_URL=my-custom-redis-server.com:6379
+Partition key: namespace
+Sort key: shard_id
+```
+
+<img width="727" alt="screen shot 2017-11-22 at 7 59 36 pm" src="https://user-images.githubusercontent.com/739782/33158557-b90e4228-cfbf-11e7-9a99-73b56a446f5f.png">
+
+## Options
+
+The consumer allows the following optional overrides.
+
+### Client
+
+Override the Kinesis client if there is any special config needed:
+
+```go
+// client
+client := kinesis.New(session.New(aws.NewConfig()))
+
+// consumer
+c, err := consumer.New(streamName, consumer.WithClient(client))
+```
+
+### Metrics
+
+Add optional counter for exposing counts for checkpoints and records processed:
+
+```go
+// counter
+counter := expvar.NewMap("counters")
+
+// consumer
+c, err := consumer.New(streamName, consumer.WithCounter(counter))
+```
+
+The [expvar package](https://golang.org/pkg/expvar/) will display consumer counts:
+
+```
+"counters": {
+    "checkpoints": 3,
+    "records": 13005
+},
 ```
 
 ### Logging
 
-[Apex Log](https://medium.com/@tjholowaychuk/apex-log-e8d9627f4a9a#.5x1uo1767) is used for logging Info. Override the logs format with other [Log Handlers](https://github.com/apex/log/tree/master/_examples). For example using the "json" log handler:
+The package defaults to `ioutil.Discard` so swallow all logs. This can be customized with the preferred logging strategy:
 
 ```go
-import(
-  "github.com/apex/log"
-  "github.com/apex/log/handlers/json"
-)
+// logger
+logger := log.New(os.Stdout, "consumer-example: ", log.LstdFlags)
 
-func main() {
-  // ...
-
-  log.SetHandler(json.New(os.Stderr))
-  log.SetLevel(log.DebugLevel)
-}
+// consumer
+c, err := consumer.New(streamName, consumer.WithLogger(logger))
 ```
-
-Which will producde the following logs:
-
-```
-  INFO[0000] processing                app=test shard=shardId-000000000000 stream=test
-  INFO[0008] emitted                   app=test count=500 shard=shardId-000000000000 stream=test
-  INFO[0012] emitted                   app=test count=500 shard=shardId-000000000000 stream=test
-```
-
-### Installation
-
-Get the package source:
-
-    $ go get github.com/harlow/kinesis-connectors
-
-### Fetching Dependencies
-
-Install `govendor`:
-
-    $ export GO15VENDOREXPERIMENT=1
-    $ go get -u github.com/kardianos/govendor
-
-Install dependencies into `./vendor/`:
-
-    $ govendor sync
-
-### Examples
-
-Use the [seed stream](https://github.com/harlow/kinesis-connectors/tree/master/examples/seed) code to put sample data onto the stream.
-
-* [Firehose](https://github.com/harlow/kinesis-connectors/tree/master/examples/firehose)
-* [S3](https://github.com/harlow/kinesis-connectors/tree/master/examples/s3)
 
 ## Contributing
 

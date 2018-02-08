@@ -1,104 +1,189 @@
-package connector
+package consumer
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"context"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"sync"
+
 	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
-// New creates a new consumer with initialied kinesis connection
-func New(config Config) *Consumer {
-	config.setDefaults()
+// Record is an alias of record returned from kinesis library
+type Record = kinesis.Record
 
-	svc := kinesis.New(
-		session.New(
-			aws.NewConfig().WithMaxRetries(10).WithRegion(config.StreamRegion),
-		),
-	)
+// Client interface is used for interacting with kinesis stream
+type Client interface {
+	GetShardIDs(string) ([]string, error)
+	GetRecords(ctx context.Context, streamName, shardID, lastSeqNum string) (<-chan *Record, <-chan error, error)
+}
 
-	return &Consumer{
-		svc:    svc,
-		Config: config,
+// Counter interface is used for exposing basic metrics from the scanner
+type Counter interface {
+	Add(string, int64)
+}
+
+type noopCounter struct{}
+
+func (n noopCounter) Add(string, int64) {}
+
+// Checkpoint interface used track consumer progress in the stream
+type Checkpoint interface {
+	Get(streamName, shardID string) (string, error)
+	Set(streamName, shardID, sequenceNumber string) error
+}
+
+type noopCheckpoint struct{}
+
+func (n noopCheckpoint) Set(string, string, string) error   { return nil }
+func (n noopCheckpoint) Get(string, string) (string, error) { return "", nil }
+
+// Option is used to override defaults when creating a new Consumer
+type Option func(*Consumer) error
+
+// WithCheckpoint overrides the default checkpoint
+func WithCheckpoint(checkpoint Checkpoint) Option {
+	return func(c *Consumer) error {
+		c.checkpoint = checkpoint
+		return nil
 	}
+}
+
+// WithLogger overrides the default logger
+func WithLogger(logger *log.Logger) Option {
+	return func(c *Consumer) error {
+		c.logger = logger
+		return nil
+	}
+}
+
+// WithCounter overrides the default counter
+func WithCounter(counter Counter) Option {
+	return func(c *Consumer) error {
+		c.counter = counter
+		return nil
+	}
+}
+
+// WithClient overrides the default client
+func WithClient(client Client) Option {
+	return func(c *Consumer) error {
+		c.client = client
+		return nil
+	}
+}
+
+// New creates a kinesis consumer with default settings. Use Option to override
+// any of the optional attributes.
+func New(streamName string, opts ...Option) (*Consumer, error) {
+	if streamName == "" {
+		return nil, fmt.Errorf("must provide stream name")
+	}
+
+	// new consumer with no-op checkpoint, counter, and logger
+	c := &Consumer{
+		streamName: streamName,
+		checkpoint: &noopCheckpoint{},
+		counter:    &noopCounter{},
+		logger:     log.New(ioutil.Discard, "", log.LstdFlags),
+		client:     NewKinesisClient(),
+	}
+
+	// override defaults
+	for _, opt := range opts {
+		if err := opt(c); err != nil {
+			return nil, err
+		}
+	}
+
+	return c, nil
 }
 
 // Consumer wraps the interaction with the Kinesis stream
 type Consumer struct {
-	svc *kinesis.Kinesis
-	Config
+	streamName string
+	client     Client
+	logger     *log.Logger
+	checkpoint Checkpoint
+	counter    Counter
 }
 
-// Start takes a handler and then loops over each of the shards
-// processing each one with the handler.
-func (c *Consumer) Start(handler Handler) {
-	resp, err := c.svc.DescribeStream(
-		&kinesis.DescribeStreamInput{
-			StreamName: aws.String(c.StreamName),
-		},
-	)
-
+// Scan scans each of the shards of the stream, calls the callback
+// func with each of the kinesis records.
+func (c *Consumer) Scan(ctx context.Context, fn func(*Record) bool) error {
+	shardIDs, err := c.client.GetShardIDs(c.streamName)
 	if err != nil {
-		c.Logger.Panicf("Error DescribeStream %v", err.Error())
+		return fmt.Errorf("get shards error: %v", err)
 	}
 
-	for _, shard := range resp.StreamDescription.Shards {
-		go c.handlerLoop(*shard.ShardId, handler)
+	if len(shardIDs) == 0 {
+		return fmt.Errorf("no shards available")
 	}
-}
 
-func (c *Consumer) handlerLoop(shardID string, handler Handler) {
-	buf := &Buffer{
-		MaxRecordCount: c.BufferSize,
-		shardID:        shardID,
-	}
-	c.Logger.Printf("Processing, %v", shardID)
-	shardIterator := c.getShardIterator(shardID)
-	for {
-		resp, err := c.svc.GetRecords(
-			&kinesis.GetRecordsInput{
-				ShardIterator: shardIterator,
-			},
-		)
-		if err != nil {
-			c.Logger.Printf("GetRecords %v", err.Error())
-		} else {
-			if len(resp.Records) > 0 {
-				for _, r := range resp.Records {
-					buf.AddRecord(r)
-					if buf.ShouldFlush() {
-						handler.HandleRecords(*buf)
-						c.Logger.Printf("Count %v flushed", buf.RecordCount())
-						c.Checkpoint.Set(c.StreamName, shardID, buf.LastSeq())
-						buf.Flush()
-					}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		wg   sync.WaitGroup
+		errc = make(chan error, 1)
+	)
+	wg.Add(len(shardIDs))
+
+	// process each shard in goroutine
+	for _, shardID := range shardIDs {
+		go func(shardID string) {
+			defer wg.Done()
+
+			if err := c.ScanShard(ctx, shardID, fn); err != nil {
+				select {
+				case errc <- fmt.Errorf("shard %s error: %v", shardID, err):
+					// first error to occur
+				default:
+					// error has already occured
 				}
 			}
-		}
-		if resp == nil || resp.NextShardIterator == nil || shardIterator == resp.NextShardIterator {
-			shardIterator = c.getShardIterator(shardID)
-		} else {
-			shardIterator = resp.NextShardIterator
-		}
+
+			cancel()
+		}(shardID)
 	}
+
+	wg.Wait()
+	close(errc)
+	return <-errc
 }
 
-func (c *Consumer) getShardIterator(shardID string) *string {
-	params := &kinesis.GetShardIteratorInput{
-		StreamName: aws.String(c.StreamName),
-		ShardId:    aws.String(shardID),
-	}
-
-	if lastSeq, err := c.Checkpoint.Get(c.StreamName, shardID); err == nil {
-		params.ShardIteratorType = aws.String("AFTER_SEQUENCE_NUMBER")
-		params.StartingSequenceNumber = aws.String(lastSeq)
-	} else {
-		params.ShardIteratorType = aws.String("TRIM_HORIZON") //Read from beginning of the stream
-	}
-
-	resp, err := c.svc.GetShardIterator(params)
+// ScanShard loops over records on a specific shard, calls the callback func
+// for each record and checkpoints the progress of scan.
+// Note: Returning `false` from the callback func will end the scan.
+func (c *Consumer) ScanShard(ctx context.Context, shardID string, fn func(*Record) bool) (err error) {
+	lastSeqNum, err := c.checkpoint.Get(c.streamName, shardID)
 	if err != nil {
-		c.Logger.Panicf("Error GetShardIterator %v", err.Error())
+		return fmt.Errorf("get checkpoint error: %v", err)
 	}
 
-	return resp.ShardIterator
+	c.logger.Println("scanning", shardID, lastSeqNum)
+
+	// get records
+	recc, errc, err := c.client.GetRecords(ctx, c.streamName, shardID, lastSeqNum)
+	if err != nil {
+		return fmt.Errorf("get records error: %v", err)
+	}
+
+	// loop records
+	for r := range recc {
+		if ok := fn(r); !ok {
+			break
+		}
+
+		c.counter.Add("records", 1)
+
+		err := c.checkpoint.Set(c.streamName, shardID, *r.SequenceNumber)
+		if err != nil {
+			return fmt.Errorf("set checkpoint error: %v", err)
+		}
+	}
+
+	c.logger.Println("exiting", shardID)
+	return <-errc
 }
