@@ -21,9 +21,6 @@
 #  version = "2.4.0"
 
 
-[[constraint]]
-  name = "github.com/apex/log"
-  version = "1.0.0"
 
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
@@ -32,14 +29,6 @@
 [[constraint]]
   branch = "master"
   name = "github.com/bmizerany/assert"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/crowdmob/goamz"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/lib/pq"
 
 [[constraint]]
   branch = "master"

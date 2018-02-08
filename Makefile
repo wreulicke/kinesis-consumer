@@ -24,7 +24,7 @@ GO_LINT=golint
 APP_NAME := kinesis-connectors
 TOP_PACKAGE_DIR := github.com/telenor-digital-asia
 PACKAGE_LIST := $(APP_NAME) \
-$(APP_NAME)/emitter
+$(APP_NAME)/checkpoint
 
 build: vet
 	@for p in $(PACKAGE_LIST); do \
