@@ -1,4 +1,4 @@
-package redis
+package checkpoint
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 
 func Test_CheckpointLifecycle(t *testing.T) {
 	// new
-	c, err := New("app")
+	c, err := NewRedis("app")
 	if err != nil {
 		t.Fatalf("new checkpoint error: %v", err)
 	}
@@ -25,7 +25,7 @@ func Test_CheckpointLifecycle(t *testing.T) {
 }
 
 func Test_SetEmptySeqNum(t *testing.T) {
-	c, err := New("app")
+	c, err := NewRedis("app")
 	if err != nil {
 		t.Fatalf("new checkpoint error: %v", err)
 	}
@@ -37,14 +37,14 @@ func Test_SetEmptySeqNum(t *testing.T) {
 }
 
 func Test_key(t *testing.T) {
-	c, err := New("app")
+	c, err := NewRedis("app")
 	if err != nil {
 		t.Fatalf("new checkpoint error: %v", err)
 	}
-
+	redisCp := c.(*checkpoint)
 	want := "app:checkpoint:stream:shard"
 
-	if got := c.key("stream", "shard"); got != want {
+	if got := redisCp.key("stream", "shard"); got != want {
 		t.Fatalf("checkpoint key, want %s, got %s", want, got)
 	}
 }
