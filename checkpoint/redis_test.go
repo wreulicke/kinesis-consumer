@@ -6,7 +6,7 @@ import (
 
 func Test_CheckpointLifecycle(t *testing.T) {
 	// new
-	c, err := NewRedis("app")
+	c, err := NewWithLocalRedis("app")
 	if err != nil {
 		t.Fatalf("new checkpoint error: %v", err)
 	}
@@ -25,7 +25,7 @@ func Test_CheckpointLifecycle(t *testing.T) {
 }
 
 func Test_SetEmptySeqNum(t *testing.T) {
-	c, err := NewRedis("app")
+	c, err := NewWithLocalRedis("app")
 	if err != nil {
 		t.Fatalf("new checkpoint error: %v", err)
 	}
@@ -37,7 +37,7 @@ func Test_SetEmptySeqNum(t *testing.T) {
 }
 
 func Test_key(t *testing.T) {
-	c, err := NewRedis("app")
+	c, err := NewWithLocalRedis("app")
 	if err != nil {
 		t.Fatalf("new checkpoint error: %v", err)
 	}

@@ -7,13 +7,15 @@ import (
 	redis "gopkg.in/redis.v5"
 )
 
-const localhost = "127.0.0.1:6379"
+// NewWithLocalRedis returns a checkpoint that uses Redis in local for underlying storage
+func NewWithLocalRedis(appName string) (Checkpoint, error) {
+	return NewRedis("127.0.0.1:6379", appName)
+}
 
 // NewRedis returns a checkpoint that uses Redis for underlying storage
-func NewRedis(appName string) (Checkpoint, error) {
-	addr := os.Getenv("REDIS_URL")
+func NewRedis(addr, appName string) (Checkpoint, error) {
 	if addr == "" {
-		addr = localhost
+		addr = os.Getenv("REDIS_URL")
 	}
 
 	client := redis.NewClient(&redis.Options{Addr: addr})
