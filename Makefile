@@ -21,10 +21,9 @@ GO_FMT=$(GO_CMD) fmt
 GO_LINT=golint
 
 #  Packages
-APP_NAME := kinesis-connectors
+APP_NAME := kinesis-consumer
 TOP_PACKAGE_DIR := github.com/telenor-digital-asia
-PACKAGE_LIST := $(APP_NAME) \
-$(APP_NAME)/checkpoint
+PACKAGE_LIST := $(APP_NAME)
 
 build: vet
 	@for p in $(PACKAGE_LIST); do \
