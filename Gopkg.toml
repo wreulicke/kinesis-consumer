@@ -33,7 +33,3 @@
 [[constraint]]
   branch = "master"
   name = "github.com/tj/go-kinesis"
-
-[[constraint]]
-  name = "gopkg.in/redis.v5"
-  version = "5.2.9"
