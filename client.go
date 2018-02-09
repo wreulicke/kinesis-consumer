@@ -9,6 +9,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
+// NewKinesisClientWithRegsion kinesis client with specific region
+func NewKinesisClientWithRegsion(region string) *KinesisClient {
+	svc := kinesis.New(session.New(aws.NewConfig().WithRegion(region)))
+	return &KinesisClient{svc}
+}
+
 // NewKinesisClient returns client to interface with Kinesis stream
 func NewKinesisClient() *KinesisClient {
 	svc := kinesis.New(session.New(aws.NewConfig()))
