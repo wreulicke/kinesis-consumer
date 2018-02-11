@@ -23,6 +23,13 @@ func WithMaxInterval(maxInterval time.Duration) Option {
 	}
 }
 
+// WithClient sets the client
+func WithClient(client *dynamodb.DynamoDB) Option {
+	return func(c *Checkpoint) {
+		c.client = client
+	}
+}
+
 // New returns a checkpoint that uses DynamoDB for underlying storage
 func New(appName, tableName string, opts ...Option) (*Checkpoint, error) {
 	client := dynamodb.New(session.New(aws.NewConfig()))
