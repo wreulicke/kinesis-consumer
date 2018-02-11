@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 )
@@ -18,6 +19,12 @@ func NewKinesisClientWithRegion(region string) *KinesisClient {
 // NewKinesisClient returns client to interface with Kinesis stream
 func NewKinesisClient() *KinesisClient {
 	svc := kinesis.New(session.New(aws.NewConfig()))
+	return &KinesisClient{svc}
+}
+
+// NewKinesisClientWithConfig returns client to interface with specific configuration
+func NewKinesisClientWithConfig(p client.ConfigProvider) *KinesisClient {
+	svc := kinesis.New(p)
 	return &KinesisClient{svc}
 }
 

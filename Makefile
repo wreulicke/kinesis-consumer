@@ -22,7 +22,7 @@ GO_LINT=golint
 
 #  Packages
 APP_NAME := kinesis-consumer
-TOP_PACKAGE_DIR := github.com/telenor-digital-asia
+TOP_PACKAGE_DIR := github.com/wreulicke
 PACKAGE_LIST := $(APP_NAME)
 
 build: vet
