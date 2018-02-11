@@ -32,20 +32,10 @@ func WithClient(client *dynamodb.DynamoDB) Option {
 
 // New returns a checkpoint that uses DynamoDB for underlying storage
 func New(appName, tableName string, opts ...Option) (*Checkpoint, error) {
-	client := dynamodb.New(session.New(aws.NewConfig()))
-
-	// ping table to verify it exists
-	_, err := client.DescribeTable(&dynamodb.DescribeTableInput{
-		TableName: aws.String(tableName),
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	ck := &Checkpoint{
 		tableName:   tableName,
 		appName:     appName,
-		client:      client,
+		client:      dynamodb.New(session.New(aws.NewConfig())),
 		maxInterval: time.Duration(1 * time.Minute),
 		done:        make(chan struct{}),
 		mu:          &sync.Mutex{},
@@ -54,6 +44,15 @@ func New(appName, tableName string, opts ...Option) (*Checkpoint, error) {
 
 	for _, opt := range opts {
 		opt(ck)
+	}
+
+	// ping table to verify it exists
+	_, err := ck.client.DescribeTable(&dynamodb.DescribeTableInput{
+		TableName: aws.String(tableName),
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	go ck.loop()
